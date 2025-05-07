@@ -1,0 +1,23 @@
+#include <GP2YDustSensor.h>
+
+const uint8_t SHARP_LED_PIN = 14;   // Sharp Dust/particle sensor Led Pin pada ESP32
+const uint8_t SHARP_VO_PIN = 12;    // Sharp Dust/particle pin Analog Output pada ESP32 
+
+GP2YDustSensor dustSensor(GP2YDustSensorType::GP2Y1010AU0F, SHARP_LED_PIN, SHARP_VO_PIN);
+
+void setup() {
+  Serial.begin(9600);
+  //dustSensor.setBaseline(0.4); // atur tegangan tanpa debu sesuai dengan percobaan Anda sendiri
+  //dustSensor.setCalibrationFactor(1.1); // kalibrasi terhadap tingkat presisi intrumen
+  dustSensor.begin();
+}
+
+void loop() {
+
+  Serial.print("Kepadatan Debu: ");
+  Serial.print(dustSensor.getDustDensity());
+  Serial.print(" ug/m3; Rata-rata: ");
+  Serial.print(dustSensor.getRunningAverage());
+  Serial.println(" ug/m3");
+  delay(1000);
+}
