@@ -1,0 +1,492 @@
+#define USE_CLIENTSSL true
+#include <AsyncTelegram2.h>
+
+//Inisialisasi7 Zona Waktu
+#include <time.h>
+//#define MYTZ "CET-1CEST,M3.5.0,M10.5.0/3"
+#define MYTZ "WIB-7"
+
+// Jika board yang digunakan ESP8266 maka library yang digunakan
+// adalah #include <ESP8266WiFi.h> -> sudah ada di core esp8266
+#ifdef ESP8266
+#include <ESP8266WiFi.h>
+BearSSL::WiFiClientSecure client;
+BearSSL::Session   session;
+BearSSL::X509List  certificate(telegram_cert);
+
+#elif defined(ESP32)
+#include <WiFi.h>
+#include <WiFiClient.h>
+#if USE_CLIENTSSL
+#include <SSLClient.h>
+#include "tg_certificate.h"
+WiFiClient base_client;
+SSLClient client(base_client, TAs, (size_t)TAs_NUM, A0, 1, SSLClient::SSL_ERROR);
+#else
+#include <WiFiClientSecure.h>
+WiFiClientSecure client;
+#endif
+#endif
+
+// Buat object myBot
+AsyncTelegram2 myBot(client);
+
+//inisialisasi librari DHT11 / Sensor Suhu dan Kelembapan
+#include "DHT.h"
+#define DHTPIN 04
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
+// SSID dan Password WIFI
+const char* ssid  =  "Aja Takon";     // SSID WiFi network
+const char* pass  =  "ajatakon";     // Password  WiFi network
+
+// Token Telegram yang diperoleh ketika membuat BOT lewat BotFather
+const char* token =  "5420320026:AAESK3a5nV1QDXcCPWOjpqirfBkqkZidGYg";  // Telegram token
+
+//Setup Wifi ESP32 sebagai Acess Point
+const char* APssid = "SmartHomeMCU";
+const char* APpassword = "12345678";
+
+//Inisialisasi Library LCD I2C
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+//inisialisasi pin relay
+
+const int relayPin1 = 33;
+const int relayPin2 = 25;
+const int relayPin3 = 26;
+const int relayPin4 = 27;
+
+bool relayStatus1 = HIGH;
+bool relayStatus2 = HIGH;
+bool relayStatus3 = HIGH;
+bool relayStatus4 = HIGH;
+
+const int tombolPin1 = 39;
+const int tombolPin2 = 34;
+const int tombolPin3 = 35;
+const int tombolPin4 = 32;
+
+bool StatusTombol1 = LOW;
+bool StatusTombol2 = LOW;
+bool StatusTombol3 = LOW;
+bool StatusTombol4 = LOW;
+
+int w = 1;
+int x = 1;
+int y = 1;
+int z = 1;
+
+//inisialisasi tombol telebot
+ReplyKeyboard replyKBTele;
+bool statusKB;
+
+//inisialisasi sensor DHT11
+float t, h;
+
+void setup(void) {
+
+  lcd.init();
+  lcd.backlight();
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("MEMULAI KONEKSI");
+  lcd.setCursor(0, 1);
+  lcd.print("DENGAN TELEBOT!");
+
+  delay(2000);
+  Serial.begin(115200);
+  Serial.println("--------SETUP--------");
+
+#ifdef ESP8266
+  Serial.println("ESP8266");
+#elif defined(ESP32)
+  Serial.println("ESP32");
+#endif
+
+  Serial.println("------Langkah 1------");
+  Serial.println("Pengaturan Access Point.");
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP(APssid, APpassword);
+  Serial.println("Access Point Terbuka");
+  Serial.println("------Langkah 2------");
+
+  Serial.println("Menghubungkan dengan WiFi.");
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi Terkoneksi : ");
+  Serial.println(ssid);
+  Serial.println("IP Address : ");
+  Serial.println(WiFi.localIP());
+  Serial.println("Webserver akan dibuka pada IP " + WiFi.localIP().toString());
+  Serial.println("Webserver sudah dibuka!");
+
+  Serial.println("------Langkah 3------");
+#ifdef ESP8266
+  // Sinkronisasi waktu dengan NTP untuk sertifikat Telegram
+  configTime(MYTZ, "time.google.com", "time.windows.com", "pool.ntp.org");
+  // Set certficate, session and some other base client properties
+  client.setSession(&session);
+  client.setTrustAnchors(&certificate);
+  client.setBufferSizes(1024, 1024);
+#elif defined(ESP32)
+  // Sinkronisasi waktu dengan NTP
+  configTzTime(MYTZ, "time.google.com", "time.windows.com", "pool.ntp.org");
+#if USE_CLIENTSSL == false
+  client.setCACert(telegram_cert);
+#endif
+#endif
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("MEMULAI KONEKSI");
+  lcd.setCursor(0, 1);
+  lcd.print("DENGAN TELEBOT!");
+
+  myBot.setUpdateTime(1000);
+  myBot.setTelegramToken(token);
+  Serial.println("Mencoba Koneksi Telegram.");
+  myBot.begin() ? Serial.println("GOOD") : Serial.println("BAD");
+  if (myBot.begin()) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("KONEKSI BERHASIL");
+  } else {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("KONEKSI GAGAL");
+  }
+  statusKB = false;
+  replyKBTele.addButton("Lampu1 On");
+  replyKBTele.addButton("Lampu2 On");
+  replyKBTele.addButton("Alat1 On");
+  replyKBTele.addButton("Alat2 On");
+  replyKBTele.addRow();
+  replyKBTele.addButton("Lampu1 Off");
+  replyKBTele.addButton("Lampu2 Off");
+  replyKBTele.addButton("Alat1 Off");
+  replyKBTele.addButton("Alat2 Off");
+  replyKBTele.addRow();
+  replyKBTele.addButton("Status 1");
+  replyKBTele.addButton("Status 2");
+  replyKBTele.addButton("Status 3");
+  replyKBTele.addButton("Status 4");
+  replyKBTele.addRow();
+  replyKBTele.addButton("Cek Suhu Dan Kelembapan");
+  replyKBTele.enableResize();
+
+  pinMode(relayPin1, OUTPUT);
+  pinMode(relayPin2, OUTPUT);
+  pinMode(relayPin3, OUTPUT);
+  pinMode(relayPin4, OUTPUT);
+
+  pinMode(tombolPin1, INPUT);
+  pinMode(tombolPin2, INPUT);
+  pinMode(tombolPin3, INPUT);
+  pinMode(tombolPin4, INPUT);
+
+  digitalWrite(relayPin1, relayStatus1);
+  digitalWrite(relayPin2, relayStatus2);
+  digitalWrite(relayPin3, relayStatus3);
+  digitalWrite(relayPin4, relayStatus4);
+
+  Serial.println("-------SELESAI-------");
+}
+
+void loop() {
+
+  float h = dht.readHumidity(false);
+  float t = dht.readTemperature(false);
+
+  TBMessage msg;
+
+  //Baris Program Telebot
+  if (myBot.getNewMessage(msg)) {
+    MessageType msgType = msg.messageType;
+    String msgText = msg.text;
+    switch (msgType) {
+      case MessageText :
+        Serial.print("Menerima pesan dari @");
+        Serial.print(msg.sender.username);
+        Serial.print(" dengan ID : ");
+        Serial.print(int(msg.sender.id));
+        Serial.println("");
+
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("*Menerima Pesan*");
+        lcd.setCursor(0, 1);
+        lcd.print("Dari @");
+        lcd.print(msg.sender.username);
+
+        //Baris Program untuk memulai Perintah TeleBot
+        if (msgText.equalsIgnoreCase("/start")) {
+          myBot.sendMessage(msg, "Halo...\nSelamat Datang Di SMART HOME ITS NU Pekalongan yang berbasis Telegram Bot..\n\nGunakan tombol dibawah untuk mengontrol LAMPU dan AC 👇", replyKBTele);
+          statusKB = true;
+        } else if (statusKB) {
+          if (msgText.equalsIgnoreCase("/start")) {
+            myBot.removeReplyKeyboard(msg, "Menutup Reply Keyboard.");
+            statusKB = false;
+
+            //Baris Program perintah cek kondisi relay 1 pada teleBot
+          } else {
+            if (msgText.equalsIgnoreCase("Lampu1 Off")) {
+              digitalWrite(relayPin1, HIGH);
+              relayStatus1 = HIGH;
+              w = 1;
+              myBot.sendMessage(msg, "🚫 Lampu 1 Telah Dipadamkan");
+              Serial.println("-------Lampu Padam (Tele)-------");
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("LAMPU 1 PADAM");
+            } else if (msgText.equalsIgnoreCase("Lampu1 On")) {
+              digitalWrite(relayPin1, LOW);
+              relayStatus1 = LOW;
+              w = 0;
+              myBot.sendMessage(msg, "💡 Lampu 1 Telah Dinyalakan");
+              Serial.println("-------Lampu Menyala (Tele)-------");
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("LAMPU 1 MENYALA");
+            } else if (msgText.equalsIgnoreCase("Status 1")) {
+              myBot.sendMessage(msg, relayStatus1 ?"🚫 Lampu 1 Padam":"💡 Lampu 1 Menyala");
+              if (relayStatus1 == HIGH) {
+                lcd.clear();
+                lcd.setCursor(0, 0);
+                lcd.print("LAMPU 1 PADAM");
+              } else {
+                lcd.clear();
+                lcd.setCursor(0, 0);
+                lcd.print("LAMPU 1 MENYALA");
+              }
+            }
+            //Baris Program perintah cek kondisi relay 2 pada teleBot
+            if (msgText.equalsIgnoreCase("Lampu2 Off")) {
+              digitalWrite(relayPin2, HIGH);
+              relayStatus2 = HIGH;
+              x = 1;
+              myBot.sendMessage(msg, "🚫 Lampu 2 Telah Dipadamkan");
+              Serial.println("-------Lampu Padam (Tele)-------");
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("LAMPU 2 PADAM");
+            } else if (msgText.equalsIgnoreCase("Lampu2 On")) {
+              digitalWrite(relayPin2, LOW);
+              relayStatus2 = LOW;
+              x = 0;
+              myBot.sendMessage(msg, "💡 Lampu 2 Telah Dinyalakan");
+              Serial.println("-------Lampu Menyala (Tele)-------");
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("LAMPU 2 MENYALA");
+            } else if (msgText.equalsIgnoreCase("Status 2")) {
+              myBot.sendMessage(msg, relayStatus2 ?"🚫 Lampu 2 Padam":"💡 Lampu 2 Menyala");
+              if (relayStatus2 == HIGH) {
+                lcd.clear();
+                lcd.setCursor(0, 0);
+                lcd.print("LAMPU 2 PADAM");
+              } else {
+                lcd.clear();
+                lcd.setCursor(0, 0);
+                lcd.print("LAMPU 2 MENYALA");
+              }
+            }
+            //Baris Program perintah cek kondisi relay 3 pada teleBot
+            if (msgText.equalsIgnoreCase("Alat1 Off")) {
+              digitalWrite(relayPin3, HIGH);
+              relayStatus3 = HIGH;
+              y = 1;
+              myBot.sendMessage(msg, "🚫 Alat 1 Telah Dipadamkan");
+              Serial.println("-------Lampu Padam (Tele)-------");
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("ALAT 1 PADAM");
+            } else if (msgText.equalsIgnoreCase("Alat1 On")) {
+              digitalWrite(relayPin3, LOW);
+              relayStatus3 = LOW;
+              y = 0;
+              myBot.sendMessage(msg, "💡 Alat 1 Telah Dinyalakan");
+              Serial.println("-------Lampu Menyala (Tele)-------");
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("ALAT 1 MENYALA");
+            } else if (msgText.equalsIgnoreCase("Status 3")) {
+              myBot.sendMessage(msg, relayStatus3 ?"🚫 Alat 1 Padam":"💡 Alat 1 Menyala");
+              if (relayStatus3 == HIGH) {
+                lcd.clear();
+                lcd.setCursor(0, 0);
+                lcd.print("ALAT 1 PADAM");
+              } else {
+                lcd.clear();
+                lcd.setCursor(0, 0);
+                lcd.print("ALAT 1 MENYALA");
+              }
+            }
+            //Baris Program perintah cek kondisi relay 4 pada teleBot
+            if (msgText.equalsIgnoreCase("Alat2 Off")) {
+              digitalWrite(relayPin4, HIGH);
+              relayStatus4 = HIGH;
+              z = 1;
+              myBot.sendMessage(msg, "🚫 Alat 2 Telah Dipadamkan");
+              Serial.println("-------Lampu Padam (Tele)-------");
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("ALAT 2 PADAM");
+            } else if (msgText.equalsIgnoreCase("Alat2 On")) {
+              digitalWrite(relayPin4, LOW);
+              relayStatus4 = LOW;
+              z = 0;
+              myBot.sendMessage(msg, "💡 Alat 2 Telah Dinyalakan");
+              Serial.println("-------Lampu Menyala (Tele)-------");
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("ALAT 2 MENYALA");
+            } else if (msgText.equalsIgnoreCase("Status 4")) {
+              myBot.sendMessage(msg, relayStatus4 ?"🚫 Alat 2 Padam":"💡 Alat 2 Menyala");
+              if (relayStatus4 == HIGH) {
+                lcd.clear();
+                lcd.setCursor(0, 0);
+                lcd.print("ALAT 2 PADAM");
+              } else {
+                lcd.clear();
+                lcd.setCursor(0, 0);
+                lcd.print("ALAT 4 MENYALA");
+              }
+            }
+            //Baris Program perintah cek suhu dan Kelembapan pada telebot
+            else if (msg.text.equalsIgnoreCase("Cek Suhu dan Kelembapan")) {
+              myBot.sendMessage(msg, ((String)"Pembacaan Sensor DHT11\n" +
+                                      (String)" \n👉 Suhu = " + t + (String)" ℃\n" +
+                                      (String)" \n👉 Kelembapan = " + h + (String)" %"));
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("Temp: ");
+              lcd.print(t, 1);
+              lcd.print(" C");
+              lcd.setCursor(0, 1);
+              lcd.print("Humid: ");
+              lcd.print(h, 1);
+              lcd.print(" %");
+            }
+            break;
+          default:
+            break;
+          }
+        }
+    }
+  }
+}
+
+void PushButton() {
+
+  //Baris Program Push Button
+  StatusTombol1 = digitalRead(tombolPin1);
+  StatusTombol2 = digitalRead(tombolPin2);
+  StatusTombol3 = digitalRead(tombolPin3);
+  StatusTombol4 = digitalRead(tombolPin4);
+
+  if (StatusTombol1 == HIGH) {
+    w++;
+    delay(300);
+  } if (StatusTombol2 == HIGH) {
+    x++;
+    delay(300);
+  } if (StatusTombol3 == HIGH) {
+    y++;
+    delay(300);
+  } if (StatusTombol4 == HIGH) {
+    z++;
+    delay(300);
+  }
+
+  switch (w) {
+    case 0:
+      // statements
+      digitalWrite(relayPin1, LOW);
+      relayStatus1 == HIGH;
+      Serial.println("Lampu1 ON");
+      break;
+    case 1:
+      // statements
+      digitalWrite(relayPin1, HIGH);
+      relayStatus1 == LOW;
+      Serial.println("Lampu1 OFF");
+      break;
+    case 2:
+      // statements
+      w = 0;
+    default:
+      // statements
+      break;
+  }
+
+  switch (x) {
+    case 0:
+      // statements
+      digitalWrite(relayPin2, LOW);
+      relayStatus2 == HIGH;
+      Serial.println("Lampu2 ON");
+      break;
+    case 1:
+      // statements
+      digitalWrite(relayPin2, HIGH);
+      relayStatus2 == LOW;
+      Serial.println("Lampu2 OFF");
+      break;
+    case 2:
+      // statements
+      x = 0;
+    default:
+      // statements
+      break;
+  }
+
+  switch (y) {
+    case 0:
+      // statements
+      digitalWrite(relayPin3, LOW);
+      relayStatus3 == HIGH;
+      Serial.println("AC1 ON");
+      break;
+    case 1:
+      // statements
+      digitalWrite(relayPin3, HIGH);
+      relayStatus3 == LOW;
+      Serial.println("AC1 OFF");
+      break;
+    case 2:
+      // statements
+      y = 0;
+    default:
+      // statements
+      break;
+  }
+
+  switch (z) {
+    case 0:
+      // statements
+      digitalWrite(relayPin4, LOW);
+      relayStatus4 == HIGH;
+      Serial.println("AC2 ON");
+      break;
+    case 1:
+      // statements
+      digitalWrite(relayPin4, HIGH);
+      relayStatus4 == LOW;
+      Serial.println("AC2 OFF");
+      break;
+    case 2:
+      // statements
+      z = 0;
+    default:
+      // statements
+      break;
+  }
+}
