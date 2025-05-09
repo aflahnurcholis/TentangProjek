@@ -1,0 +1,937 @@
+/*
+1111+B        Reset pasword ke 1111
+Password+A    Masuk ke Menu Utama
+*/
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Keypad.h>
+#include <SPI.h>
+#include <MFRC522.h>
+#include <EEPROM.h>
+#include <Adafruit_Fingerprint.h>
+
+void writeString(char add, String data);
+String read_String(char add);
+String recivedData;
+String recivedData1;
+String recivedData2;
+String recivedData3;
+String myStr;
+int myInt;
+
+#define SS_PIN 5
+#define RST_PIN 2
+
+MFRC522 rfid(SS_PIN, RST_PIN);
+MFRC522::MIFARE_Key key;
+
+String strID;
+String passwordRFID;  //Password RFID
+
+LiquidCrystal_I2C lcd(0x27, 20, 4);
+
+const byte ROWS = 4;  //four rows
+const byte COLS = 4;  //three columns
+char keys[ROWS][COLS] = {
+  { '1', '2', '3', 'A' },
+  { '4', '5', '6', 'B' },
+  { '7', '8', '9', 'C' },
+  { '*', '0', '#', 'D' }
+};
+byte rowPins[ROWS] = { 13, 12, 14, 27 };  //connect to the row pinouts of the keypad
+byte colPins[COLS] = { 26, 25, 33, 32 };  //connect to the column pinouts of the keypad
+
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+char key1;            //Variabel penampung input keypad
+int number = 0;       //Variabel penampung nilai angka
+int password = 1111;  //Password Keypad
+#define LED 4         //LED pada pin D5, Buzzer, Relay
+int Menu = 0;
+int SubMenu = 2;
+uint8_t num5;
+
+#include <Adafruit_Fingerprint.h>
+Adafruit_Fingerprint finger = Adafruit_Fingerprint(&Serial2);
+uint8_t id;
+
+// Setup ==============================================================================================================
+
+void setup() {
+  EEPROM.begin(512);
+  SPI.begin();
+  rfid.PCD_Init();
+  lcd.begin();  // initialize the lcd
+  lcd.begin();
+  // Print a message to the LCD.
+  lcd.backlight();
+  Serial.begin(9600);
+
+  //Seting LED sebagai Output dan Tombol sebagai Input
+  pinMode(LED, OUTPUT);
+
+  while (!Serial)
+    ;
+  delay(100);
+  Serial.println("\n\nAdafruit finger detect test");
+
+  // set the data rate for the sensor serial port
+  finger.begin(57600);
+  delay(5);
+  if (finger.verifyPassword()) {
+    Serial.println("Found fingerprint sensor!");
+  } else {
+    Serial.println("Did not find fingerprint sensor :(");
+    while (1) { delay(1); }
+  }
+
+  Serial.println(F("Reading sensor parameters"));
+  finger.getParameters();
+  Serial.print(F("Status: 0x"));
+  Serial.println(finger.status_reg, HEX);
+  Serial.print(F("Sys ID: 0x"));
+  Serial.println(finger.system_id, HEX);
+  Serial.print(F("Capacity: "));
+  Serial.println(finger.capacity);
+  Serial.print(F("Security level: "));
+  Serial.println(finger.security_level);
+  Serial.print(F("Device address: "));
+  Serial.println(finger.device_addr, HEX);
+  Serial.print(F("Packet len: "));
+  Serial.println(finger.packet_len);
+  Serial.print(F("Baud rate: "));
+  Serial.println(finger.baud_rate);
+
+  finger.getTemplateCount();
+
+  if (finger.templateCount == 0) {
+    Serial.print("Sensor doesn't contain any fingerprint data. Please run the 'enroll' example.");
+  } else {
+    Serial.println("Waiting for valid finger...");
+    Serial.print("Sensor contains ");
+    Serial.print(finger.templateCount);
+    Serial.println(" templates");
+  }
+}
+
+// Loop ==============================================================================================================
+
+void loop() {
+
+  key1 = keypad.getKey();
+  //AccessPassKeypad();
+  //InputPassKeypad();
+
+  if (key1 == 'A') {
+    Menu = 1;
+  } else if (key1 == 'B') {
+    Menu = 2;
+  } else if (key1 == '#') {
+    lcd.clear();
+    if (Menu == 1) {
+      Menu = 0;
+      SubMenu = 1;
+    } else if (Menu == 2) {
+      Menu = 0;
+      SubMenu = 2;
+    } else {
+    }
+  }
+
+  switch (SubMenu) {
+    case 1:
+      Menu_InputPasword();
+      break;
+    case 2:
+      Menu_SystemRun();
+      break;
+    case 3:
+      InputPaswordKeypad();
+      break;
+    case 4:
+      InputPaswordRFID();
+      break;
+    case 5:
+      InputPaswordFingger();
+      break;
+  }
+
+  if (Menu == 1) {
+    lcd.setCursor(0, 0);
+    lcd.print("  Doorlock System   ");
+    lcd.setCursor(0, 1);
+    lcd.print("                    ");
+    lcd.setCursor(0, 2);
+    lcd.print("-> Input Pasword    ");
+    lcd.setCursor(0, 3);
+    lcd.print("   System Running   ");
+  } else if (Menu == 2) {
+    lcd.setCursor(0, 0);
+    lcd.print("  Doorlock System   ");
+    lcd.setCursor(0, 1);
+    lcd.print("                    ");
+    lcd.setCursor(0, 2);
+    lcd.print("   Input Pasword    ");
+    lcd.setCursor(0, 3);
+    lcd.print("-> System Running   ");
+  }
+}
+
+// Menu ==============================================================================================================
+
+void Menu_InputPasword() {
+  lcd.setCursor(0, 0);
+  lcd.print("   Input Pasword    ");
+  lcd.setCursor(0, 1);
+  lcd.print("A Keypad            ");
+  lcd.setCursor(0, 2);
+  lcd.print("B RFID              ");
+  lcd.setCursor(0, 3);
+  lcd.print("C Finger Sensor    ");
+
+
+  if (key1 == 'A') {
+    lcd.clear();
+    Menu = 0;
+    SubMenu = 3;
+  } else if (key1 == 'B') {
+    lcd.clear();
+    Menu = 0;
+    SubMenu = 4;
+  } else if (key1 == 'C') {
+    lcd.clear();
+    Menu = 0;
+    SubMenu = 5;
+  } else if (key1 == '*') {
+    lcd.clear();
+    Menu = 1;
+    SubMenu = 0;
+  }
+}
+
+void Menu_SystemRun() {
+  lcd.setCursor(0, 0);
+  lcd.print("   Enter Password   ");
+  lcd.setCursor(0, 1);
+  lcd.print("  to Open the Door  ");
+
+  AccessPassKeypad();
+  AccessPassRFID();
+  AccessFINGERPRINT();
+
+  analogReadResolution(12);
+  int sensorVal = analogRead(34);
+  //Serial.println(sensorVal);
+
+  if (sensorVal > 3000) {
+    lcd.setCursor(0, 3);
+    lcd.print("  Access Accepted   ");  //Tampilan LCD
+    digitalWrite(LED, HIGH);            //LED Menyala
+    delay(5000);
+
+    lcd.setCursor(0, 3);
+    lcd.print("                    ");
+  } else {
+    digitalWrite(LED, LOW);
+  }
+}
+
+// Sub Sub Menu ======================================================================================================
+
+void InputPaswordKeypad() {
+  lcd.setCursor(0, 0);
+  lcd.print("   Input Pasword    ");
+  lcd.setCursor(0, 1);
+  lcd.print("      Keypad        ");
+
+  InputPassKeypad();
+
+  if (key1 == '*') {
+    number = 0;
+    lcd.clear();
+    Menu = 0;
+    SubMenu = 1;
+  }
+}
+
+void InputPaswordRFID() {
+  lcd.setCursor(0, 0);
+  lcd.print("   Input Pasword    ");
+  lcd.setCursor(0, 1);
+  lcd.print("       RFID         ");
+
+  //InputPassRFID();
+  Input_RFID();
+
+  if (key1 == '*') {
+    lcd.clear();
+    Menu = 0;
+    SubMenu = 1;
+  }
+}
+void InputPaswordFingger() {
+  lcd.setCursor(0, 0);
+  lcd.print("   Input Pasword    ");
+  lcd.setCursor(0, 1);
+  lcd.print("   Finger Sensor   ");
+
+  Input_Finger();
+}
+
+// System Running ====================================================================================================
+
+void AccessPassKeypad() {
+  switch (key1) {
+    case '0' ... '9':
+      lcd.setCursor(6, 3);
+      number = number * 10 + (key1 - '0');
+      lcd.print(number);
+      break;
+    //------------Jika input '#' maka cek password------------//
+    case 'A':
+      recivedData = read_String(10);
+      myInt = recivedData.toInt();
+
+      if (number == myInt) {  //Jika password benar, maka
+        lcd.setCursor(0, 3);
+        lcd.print("  Access Accepted   ");  //Tampilan LCD
+        delay(2000);
+        number = 0;
+        lcd.setCursor(0, 3);
+        lcd.print("                    ");
+
+        number = 0;
+        lcd.clear();
+        Menu = 1;
+        SubMenu = 0;
+      } else {  //Jika salah, maka
+        lcd.setCursor(0, 3);
+        lcd.print("  Invalid Password  ");  //Tampilan LCD
+        delay(2000);
+        number = 0;
+        lcd.setCursor(0, 3);
+        lcd.print("                    ");
+        Menu = 0;
+        SubMenu = 2;
+      }
+      break;
+    case 'B':
+      if (number == 1111) {  //Jika password benar, maka
+        lcd.setCursor(0, 3);
+        lcd.print("  Password Reset    ");  //Tampilan LCD
+        delay(2000);
+        number = 0;
+        lcd.setCursor(0, 3);
+        lcd.print("                    ");
+        writeString(10, "1111");           //Password Keypad to Address 10 and String type data
+        writeString(20, "0000000000000");  //Password Keypad to Address 10 and String type data
+        writeString(35, "0000000000000");  //Password Keypad to Address 10 and String type data
+        writeString(50, "0000000000000");  //Password Keypad to Address 10 and String type data
+        Menu = 0;
+        SubMenu = 2;
+      } else {  //Jika salah, maka
+        lcd.setCursor(0, 3);
+        lcd.print("  Invalid Password  ");  //Tampilan LCD
+        delay(2000);
+        number = 0;
+        lcd.setCursor(0, 3);
+        lcd.print("                    ");
+        Menu = 0;
+        SubMenu = 2;
+      }
+      break;
+    case 'D':
+      recivedData = read_String(10);
+      myInt = recivedData.toInt();
+
+      if (number == myInt) {  //Jika password benar, maka
+        lcd.setCursor(0, 3);
+        lcd.print("  Access Accepted   ");  //Tampilan LCD
+        digitalWrite(LED, HIGH);            //LED Menyala
+        delay(5000);
+        digitalWrite(LED, LOW);
+        number = 0;
+        lcd.setCursor(0, 3);
+        lcd.print("                    ");
+      } else {  //Jika salah, maka
+        lcd.setCursor(0, 3);
+        lcd.print("  Invalid Password  ");  //Tampilan LCD
+        delay(2000);
+        number = 0;
+        lcd.setCursor(0, 3);
+        lcd.print("                    ");
+      }
+      break;
+    //------------Jika input '*' maka hapus tampilan------------//
+    case 'C':
+      number = 0;
+      lcd.setCursor(0, 3);
+      lcd.print("                    ");
+      break;
+  }
+}
+
+void AccessPassRFID() {
+  // put your main code here, to run repeatedly:
+  if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial())
+    return;
+
+  // Serial.print(F("PICC type: "));
+  MFRC522::PICC_Type piccType = rfid.PICC_GetType(rfid.uid.sak);
+  // Serial.println(rfid.PICC_GetTypeName(piccType));
+
+  // Check is the PICC of Classic MIFARE type
+  if (piccType != MFRC522::PICC_TYPE_MIFARE_MINI && piccType != MFRC522::PICC_TYPE_MIFARE_1K && piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
+    //Serial.println(F("Your tag is not of type MIFARE Classic."));
+    return;
+  }
+
+  //id kartu dan yang akan dikirim ke database
+  strID = "";
+  for (byte i = 0; i < 4; i++) {
+    strID +=
+      (rfid.uid.uidByte[i] < 0x10 ? "0" : "") + String(rfid.uid.uidByte[i], HEX) + (i != 3 ? ":" : "");
+  }
+
+  strID.toUpperCase();
+  //Serial.print("Kartu ID Anda : ");
+  //Serial.println(strID);
+  recivedData1 = read_String(20);
+
+  if (strID == recivedData1) {
+    lcd.setCursor(0, 3);
+    lcd.print("  Access Accepted   ");  //Tampilan LCD
+    digitalWrite(LED, HIGH);            //LED Menyala
+    delay(5000);
+    digitalWrite(LED, LOW);
+    lcd.setCursor(0, 3);
+    lcd.print("                    ");
+  } else {
+  }
+
+  recivedData2 = read_String(35);
+
+  if (strID == recivedData2) {
+    lcd.setCursor(0, 3);
+    lcd.print("  Access Accepted   ");  //Tampilan LCD
+    digitalWrite(LED, HIGH);            //LED Menyala
+    delay(2000);
+    digitalWrite(LED, LOW);
+    lcd.setCursor(0, 3);
+    lcd.print("                    ");
+  } else {
+  }
+
+  recivedData3 = read_String(50);
+
+  if (strID == recivedData3) {
+    lcd.setCursor(0, 3);
+    lcd.print("  Access Accepted   ");  //Tampilan LCD
+    digitalWrite(LED, HIGH);            //LED Menyala
+    delay(2000);
+    digitalWrite(LED, LOW);
+    lcd.setCursor(0, 3);
+    lcd.print("                    ");
+  } else {
+  }
+
+  if (strID != recivedData1 && strID != recivedData2 && strID != recivedData3) {
+    lcd.setCursor(0, 3);
+    lcd.print("  Invalid Password  ");  //Tampilan LCD
+    delay(2000);
+    lcd.setCursor(0, 3);
+    lcd.print("                    ");
+  }
+}
+
+void InputPassKeypad() {
+  switch (key1) {
+    case '0' ... '9':
+      lcd.setCursor(6, 3);
+      number = number * 10 + (key1 - '0');
+      lcd.print(number);
+      break;
+    //------------Jika input '#' maka cek password------------//
+    case 'D':
+      myStr = String(number);
+      writeString(10, myStr);  //Password Keypad to Address 10 and String type data
+      password = number;
+      lcd.setCursor(0, 3);
+      lcd.print("    Input success   ");  //Tampilan LCD
+      delay(2000);
+      number = 0;
+      lcd.clear();
+      break;
+    //------------Jika input '*' maka hapus tampilan------------//
+    case 'C':
+      number = 0;
+      lcd.setCursor(0, 3);
+      lcd.print("                    ");
+      break;
+  }
+}
+
+void Input_RFID()  // run over and over again
+{
+  lcd.setCursor(0, 3);
+  lcd.print(" input id(from 1-3) ");
+  delay(2000);
+  lcd.setCursor(0, 3);
+  lcd.print("                    ");
+
+  num5 = 0;
+  id = num5;
+
+  while (num5 == 0) {
+    key1 = keypad.getKey();
+
+    switch (key1) {
+      case '0' ... '9':
+        lcd.setCursor(6, 3);
+        number = number * 10 + (key1 - '0');
+        lcd.print(number);
+        break;
+      case 'D':
+        num5 = number;
+        lcd.setCursor(0, 3);
+        lcd.print("  Input id success  ");  //Tampilan LCD
+        delay(2000);
+        number = 0;
+        //lcd.clear();
+        break;
+      case '*':
+        number = 10;
+        num5 = number;
+        number = 0;
+        delay(200);
+        break;
+      case 'C':
+        number = 0;
+        lcd.setCursor(0, 3);
+        lcd.print("                    ");
+        break;
+    }
+  }
+
+  //return num5;
+  Serial.println(num5);
+  if (num5 == 10) {
+    lcd.clear();
+    Menu = 0;
+    SubMenu = 1;
+    Menu_InputPasword();
+  } else {
+    id = num5;
+
+    lcd.setCursor(0, 3);
+    lcd.print("     TAG RFID       ");
+    delay(2000);
+    lcd.setCursor(0, 3);
+    lcd.print("                    ");
+
+    while (id != 0) {
+      InputPassRFID();
+    }
+  }
+}
+
+void InputPassRFID() {
+  // put your main code here, to run repeatedly:
+  if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial())
+    return;
+
+  // Serial.print(F("PICC type: "));
+  MFRC522::PICC_Type piccType = rfid.PICC_GetType(rfid.uid.sak);
+  // Serial.println(rfid.PICC_GetTypeName(piccType));
+
+  // Check is the PICC of Classic MIFARE type
+  if (piccType != MFRC522::PICC_TYPE_MIFARE_MINI && piccType != MFRC522::PICC_TYPE_MIFARE_1K && piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
+    //Serial.println(F("Your tag is not of type MIFARE Classic."));
+    return;
+  }
+
+  //id kartu dan yang akan dikirim ke database
+  strID = "";
+  for (byte i = 0; i < 4; i++) {
+    strID +=
+      (rfid.uid.uidByte[i] < 0x10 ? "0" : "") + String(rfid.uid.uidByte[i], HEX) + (i != 3 ? ":" : "");
+  }
+
+  strID.toUpperCase();
+  //Serial.print("Kartu ID Anda : ");
+  //Serial.println(strID);
+  passwordRFID = strID;
+
+  switch (id) {
+    case 1:
+      writeString(20, strID);  //Password RFID to Address 30 and String type data
+      break;
+    case 2:
+      writeString(35, strID);  //Password RFID to Address 30 and String type data
+      break;
+    case 3:
+      writeString(50, strID);  //Password RFID to Address 30 and String type data
+      break;
+  }
+
+  id == 0;
+
+  lcd.setCursor(0, 3);
+  lcd.print(" ID ==> ");
+  lcd.print(strID);
+  delay(2000);
+  lcd.setCursor(0, 3);
+  lcd.print("    Input success   ");
+  delay(2000);
+  lcd.setCursor(0, 3);
+  lcd.print("                    ");
+  Input_RFID();
+}
+
+// Program EEPROM ====================================================================================================
+
+void writeString(char add, String data) {
+  int _size = data.length();
+  int i;
+  for (i = 0; i < _size; i++) {
+    EEPROM.write(add + i, data[i]);
+  }
+  EEPROM.write(add + _size, '\0');  //Add termination null character for String Data
+  EEPROM.commit();
+}
+
+
+String read_String(char add) {
+  int i;
+  char data[100];  //Max 100 Bytes
+  int len = 0;
+  unsigned char k;
+  k = EEPROM.read(add);
+  while (k != '\0' && len < 500)  //Read until null character
+  {
+    k = EEPROM.read(add + len);
+    data[len] = k;
+    len++;
+  }
+  data[len] = '\0';
+  return String(data);
+}
+
+// Program Fingerprint ===============================================================================================
+// ENROLL ============================================================================================================
+
+uint8_t readnumber(void) {
+  uint8_t num = 0;
+
+  while (num == 0) {
+    key1 = keypad.getKey();
+
+    switch (key1) {
+      case '0' ... '9':
+        lcd.setCursor(6, 3);
+        number = number * 10 + (key1 - '0');
+        lcd.print(number);
+        break;
+      case 'D':
+        num = number;
+        lcd.setCursor(0, 3);
+        lcd.print("  Input id success  ");  //Tampilan LCD
+        delay(2000);
+        number = 0;
+        lcd.clear();
+        break;
+    }
+  }
+
+  return num;
+}
+
+void Input_Finger()  // run over and over again
+{
+  Serial.println("Ready to enroll a fingerprint!");
+  Serial.println("Please type in the ID # (from 1 to 127) you want to save this finger as...");
+  lcd.setCursor(0, 3);
+  lcd.print("input id(from 1-127)");
+  delay(2000);
+  lcd.setCursor(0, 3);
+  lcd.print("                    ");
+  id = readnumber();
+  if (id == 0) {  // ID #0 not allowed, try again!
+    return;
+  }
+  Serial.print("Enrolling ID #");
+  Serial.println(id);
+
+  while (!getFingerprintEnroll())
+    ;
+}
+
+uint8_t getFingerprintEnroll() {
+
+  int p = -1;
+  Serial.print("Waiting for valid finger to enroll as #");
+  Serial.println(id);
+  lcd.setCursor(0, 3);
+  lcd.print("   Waiting Finger   ");  //Tampilan LCD
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    switch (p) {
+      case FINGERPRINT_OK:
+        Serial.println("Image taken");
+        break;
+      case FINGERPRINT_NOFINGER:
+        Serial.println(".");
+        break;
+      case FINGERPRINT_PACKETRECIEVEERR:
+        Serial.println("Communication error");
+        break;
+      case FINGERPRINT_IMAGEFAIL:
+        Serial.println("Imaging error");
+        break;
+      default:
+        Serial.println("Unknown error");
+        break;
+    }
+  }
+
+  // OK success!
+
+  p = finger.image2Tz(1);
+  switch (p) {
+    case FINGERPRINT_OK:
+      Serial.println("Image converted");
+      break;
+    case FINGERPRINT_IMAGEMESS:
+      Serial.println("Image too messy");
+      return p;
+    case FINGERPRINT_PACKETRECIEVEERR:
+      Serial.println("Communication error");
+      return p;
+    case FINGERPRINT_FEATUREFAIL:
+      Serial.println("Could not find fingerprint features");
+      return p;
+    case FINGERPRINT_INVALIDIMAGE:
+      Serial.println("Could not find fingerprint features");
+      return p;
+    default:
+      Serial.println("Unknown error");
+      return p;
+  }
+
+  Serial.println("Remove finger");
+  lcd.setCursor(0, 3);
+  lcd.print("   Remove finger    ");  //Tampilan LCD
+  delay(2000);
+  p = 0;
+  while (p != FINGERPRINT_NOFINGER) {
+    p = finger.getImage();
+  }
+  Serial.print("ID ");
+  Serial.println(id);
+  p = -1;
+  Serial.println("Place same finger again");
+  lcd.setCursor(0, 3);
+  lcd.print("    Finger Again    ");  //Tampilan LCD
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    switch (p) {
+      case FINGERPRINT_OK:
+        Serial.println("Image taken");
+        break;
+      case FINGERPRINT_NOFINGER:
+        Serial.print(".");
+        break;
+      case FINGERPRINT_PACKETRECIEVEERR:
+        Serial.println("Communication error");
+        break;
+      case FINGERPRINT_IMAGEFAIL:
+        Serial.println("Imaging error");
+        break;
+      default:
+        Serial.println("Unknown error");
+        break;
+    }
+  }
+
+  // OK success!
+
+  p = finger.image2Tz(2);
+  switch (p) {
+    case FINGERPRINT_OK:
+      Serial.println("Image converted");
+      break;
+    case FINGERPRINT_IMAGEMESS:
+      Serial.println("Image too messy");
+      return p;
+    case FINGERPRINT_PACKETRECIEVEERR:
+      Serial.println("Communication error");
+      return p;
+    case FINGERPRINT_FEATUREFAIL:
+      Serial.println("Could not find fingerprint features");
+      return p;
+    case FINGERPRINT_INVALIDIMAGE:
+      Serial.println("Could not find fingerprint features");
+      return p;
+    default:
+      Serial.println("Unknown error");
+      return p;
+  }
+
+  // OK converted!
+  Serial.print("Creating model for #");
+  Serial.println(id);
+
+  p = finger.createModel();
+  if (p == FINGERPRINT_OK) {
+    Serial.println("Prints matched!");
+  } else if (p == FINGERPRINT_PACKETRECIEVEERR) {
+    Serial.println("Communication error");
+    return p;
+  } else if (p == FINGERPRINT_ENROLLMISMATCH) {
+    Serial.println("Fingerprints did not match");
+    return p;
+  } else {
+    Serial.println("Unknown error");
+    return p;
+  }
+
+  Serial.print("ID ");
+  Serial.println(id);
+  p = finger.storeModel(id);
+  if (p == FINGERPRINT_OK) {
+    Serial.println("Stored!");
+    lcd.setCursor(0, 3);
+    lcd.print("      Stored!       ");  //Tampilan LCD
+    delay(1000);
+    lcd.clear();
+    Menu = 0;
+    SubMenu = 1;
+    Menu_InputPasword();
+  } else if (p == FINGERPRINT_PACKETRECIEVEERR) {
+    Serial.println("Communication error");
+    return p;
+  } else if (p == FINGERPRINT_BADLOCATION) {
+    Serial.println("Could not store in that location");
+    return p;
+  } else if (p == FINGERPRINT_FLASHERR) {
+    Serial.println("Error writing to flash");
+    return p;
+  } else {
+    Serial.println("Unknown error");
+    return p;
+  }
+
+  return true;
+}
+
+// FINGERPRINT =======================================================================================================
+
+void AccessFINGERPRINT()  // run over and over again
+{
+  getFingerprintID();
+  //delay(5);            //don't ned to run this at full speed.
+}
+
+uint8_t getFingerprintID() {
+  uint8_t p = finger.getImage();
+  switch (p) {
+    case FINGERPRINT_OK:
+      Serial.println("Image taken");
+      break;
+    case FINGERPRINT_NOFINGER:
+      Serial.println("No finger detected");
+      return p;
+    case FINGERPRINT_PACKETRECIEVEERR:
+      Serial.println("Communication error");
+      return p;
+    case FINGERPRINT_IMAGEFAIL:
+      Serial.println("Imaging error");
+      return p;
+    default:
+      Serial.println("Unknown error");
+      return p;
+  }
+
+  // OK success!
+
+  p = finger.image2Tz();
+  switch (p) {
+    case FINGERPRINT_OK:
+      Serial.println("Image converted");
+      break;
+    case FINGERPRINT_IMAGEMESS:
+      Serial.println("Image too messy");
+      return p;
+    case FINGERPRINT_PACKETRECIEVEERR:
+      Serial.println("Communication error");
+      return p;
+    case FINGERPRINT_FEATUREFAIL:
+      Serial.println("Could not find fingerprint features");
+      return p;
+    case FINGERPRINT_INVALIDIMAGE:
+      Serial.println("Could not find fingerprint features");
+      return p;
+    default:
+      Serial.println("Unknown error");
+      return p;
+  }
+
+  // OK converted!
+  p = finger.fingerSearch();
+  if (p == FINGERPRINT_OK) {
+    Serial.println("Found a print match!");
+
+    lcd.setCursor(0, 3);
+    lcd.print("  Access Accepted   ");  //Tampilan LCD
+    digitalWrite(LED, HIGH);            //LED Menyala
+    delay(2000);
+    digitalWrite(LED, LOW);
+    lcd.setCursor(0, 3);
+    lcd.print("                    ");
+
+  } else if (p == FINGERPRINT_PACKETRECIEVEERR) {
+    Serial.println("Communication error");
+    return p;
+  } else if (p == FINGERPRINT_NOTFOUND) {
+    Serial.println("Did not find a match");
+
+    lcd.setCursor(0, 3);
+    lcd.print("  Invalid Password  ");  //Tampilan LCD
+    delay(2000);
+    lcd.setCursor(0, 3);
+    lcd.print("                    ");
+
+    return p;
+  } else {
+    Serial.println("Unknown error");
+    return p;
+  }
+
+  // found a match!
+  Serial.print("Found ID #");
+  Serial.print(finger.fingerID);
+  Serial.print(" with confidence of ");
+  Serial.println(finger.confidence);
+
+  return finger.fingerID;
+}
+
+// returns -1 if failed, otherwise returns ID #
+int getFingerprintIDez() {
+  uint8_t p = finger.getImage();
+  if (p != FINGERPRINT_OK) return -1;
+
+  p = finger.image2Tz();
+  if (p != FINGERPRINT_OK) return -1;
+
+  p = finger.fingerFastSearch();
+  if (p != FINGERPRINT_OK) return -1;
+
+  // found a match!
+  Serial.print("Found ID #");
+  Serial.print(finger.fingerID);
+  Serial.print(" with confidence of ");
+  Serial.println(finger.confidence);
+  return finger.fingerID;
+}
+
+//====================================================================================================================
