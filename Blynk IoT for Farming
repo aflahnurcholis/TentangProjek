@@ -1,0 +1,205 @@
+//===========================================Inisisalisasi Blynk ESP32============================================================//
+#define BLYNK_TEMPLATE_ID "TMPL6KLcruvWz"
+#define BLYNK_TEMPLATE_NAME "PKM SAWAH"
+#define BLYNK_AUTH_TOKEN "oAwaQ5w2j9yOGcxPfFsxGAcKmiuV4QPY"
+
+#define BLYNK_PRINT Serial
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "Aja Takon";
+char pass[] = "ajatakon";
+
+BlynkTimer timer;
+//==========================================Inisialisasi DFPlayer ESP32==========================================================//
+#include "Arduino.h"
+#include "DFRobotDFPlayerMini.h"
+
+#if (defined(ARDUINO_AVR_UNO) || defined(ESP8266))
+#include <SoftwareSerial.h>
+SoftwareSerial softSerial(/*rx =*/4, /*tx =*/5);
+#define FPSerial softSerial
+#else
+#define FPSerial Serial1
+#endif
+
+DFRobotDFPlayerMini myDFPlayer;
+//===========================================Inisialisasi Port Relay============================================================//
+#define relay1_pin 25  // Terhubung Ke Lonceng
+#define relay2_pin 26  // Terhubung Ke Pompa
+#define relay3_pin 27  // Terhubung Ke Suara
+#define relay4_pin 33  // Terhubung Ke Power Buzzer
+
+int relay1_state = 0;
+int relay2_state = 0;
+int relay3_state = 0;
+int relay4_state = 0;
+
+#define button1_vpin V1
+#define button2_vpin V2
+#define button3_vpin V3
+#define button4_vpin V4
+
+//===========================================Inisialisasi Port ESP32============================================================//
+int pirSensorPin1 = 13;
+int pirSensorPin2 = 16;
+int pirSensorPin3 = 17;
+int pirSensorPin4 = 18;
+
+int pirSensorPin5 = 19;
+int pirSensorPin6 = 21;
+int pirSensorPin7 = 22;
+int pirSensorPin8 = 23;
+
+
+//===========================================Program Logika Blynk============================================================//
+BLYNK_CONNECTED() {
+  Blynk.syncVirtual(button1_vpin);
+  Blynk.syncVirtual(button2_vpin);
+  Blynk.syncVirtual(button3_vpin);
+  Blynk.syncVirtual(button4_vpin);
+}
+
+BLYNK_WRITE(button1_vpin) {  //Lonceng
+  relay1_state = param.asInt();
+  digitalWrite(relay1_pin, relay1_state);
+}
+
+BLYNK_WRITE(button2_vpin) {  //Pompa
+  relay2_state = param.asInt();
+  digitalWrite(relay2_pin, relay2_state);
+}
+
+BLYNK_WRITE(button3_vpin) {  //Suara
+  relay3_state = param.asInt();
+  digitalWrite(relay3_pin, relay3_state);
+}
+
+BLYNK_WRITE(button4_vpin) { //Power Suara
+  relay4_state = param.asInt();
+  digitalWrite(relay4_pin, relay4_state);
+  delay(1000);
+  return;
+}
+
+void setup() {
+
+  Serial.begin(115200);
+  Blynk.begin(auth, ssid, pass);
+
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED)  //Wait for connection ok
+  {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("");
+  Serial.println("WiFi connected");  //WIFI cooection ok
+
+#if (defined ESP32)
+  FPSerial.begin(9600, SERIAL_8N1, /*rx =*/16, /*tx =*/17);  // Inisialisasi PIN DF PLAYER ke RX 16 TX 17 ESP32
+#else
+  FPSerial.begin(9600);
+#endif
+
+  myDFPlayer.begin(FPSerial, /*isACK = */ true, /*doReset = */ true);
+
+  myDFPlayer.volume(30);  //Set volume value. From 0 to 30
+
+  pinMode(relay1_pin, OUTPUT);
+  pinMode(relay2_pin, OUTPUT);
+  pinMode(relay3_pin, OUTPUT);
+  pinMode(relay4_pin, OUTPUT);
+
+  digitalWrite(relay1_pin, HIGH);
+  digitalWrite(relay2_pin, HIGH);
+  digitalWrite(relay3_pin, HIGH);
+  digitalWrite(relay4_pin, HIGH);
+
+  pinMode(pirSensorPin1, INPUT);
+  pinMode(pirSensorPin2, INPUT);
+  pinMode(pirSensorPin3, INPUT);
+  pinMode(pirSensorPin4, INPUT);
+
+  pinMode(pirSensorPin5, INPUT);
+  pinMode(pirSensorPin6, INPUT);
+  pinMode(pirSensorPin7, INPUT);
+  pinMode(pirSensorPin8, INPUT);
+}
+
+void loop() {
+
+  int pirValue1 = digitalRead(pirSensorPin1);
+  int pirValue2 = digitalRead(pirSensorPin2);
+  int pirValue3 = digitalRead(pirSensorPin3);
+  int pirValue4 = digitalRead(pirSensorPin4);
+
+  int pirValue5 = digitalRead(pirSensorPin5);
+  int pirValue6 = digitalRead(pirSensorPin6);
+  int pirValue7 = digitalRead(pirSensorPin7);
+  int pirValue8 = digitalRead(pirSensorPin8);
+
+  Blynk.run();
+  timer.run();
+
+  if (pirValue1 == HIGH) {
+    digitalWrite(relay1_pin, LOW);
+    Serial.println("Motion 1 detected!");
+    delay(3000);
+        digitalWrite(relay1_pin, HIGH);
+  } else {
+  }
+  if (pirValue2 == HIGH) {
+    digitalWrite(relay1_pin, LOW);
+    Serial.println("Motion 2 detected!");
+    delay(3000);
+    digitalWrite(relay1_pin, HIGH);
+  } else {
+  }
+  if (pirValue3 == HIGH) {
+    digitalWrite(relay1_pin, LOW);
+    Serial.println("Motion 3 detected!");
+    delay(3000);
+    digitalWrite(relay1_pin, HIGH);
+  } else {
+  }
+  if (pirValue4 == HIGH) {
+    digitalWrite(relay1_pin, LOW);
+    Serial.println("Motion 4 detected!");
+    delay(3000);
+    digitalWrite(relay1_pin, HIGH);
+  } else {
+  }
+
+  if (pirValue5 == HIGH) {
+    digitalWrite(relay3_pin, LOW);
+    delay(10);
+    digitalWrite(relay3_pin, HIGH);
+    Serial.println("Motion 5 detected!");
+  } else {
+  }
+  if (pirValue6 == HIGH) {
+    digitalWrite(relay3_pin, LOW);
+    delay(10);
+    digitalWrite(relay3_pin, HIGH);
+    Serial.println("Motion 6 detected!");
+  } else {
+  }
+  if (pirValue7 == HIGH) {
+    digitalWrite(relay3_pin, LOW);
+    delay(10);
+    digitalWrite(relay3_pin, HIGH);
+    Serial.println("Motion 7 detected!");
+  } else {
+  }
+  if (pirValue8 == HIGH) {
+    digitalWrite(relay3_pin, LOW);
+    delay(10);
+    digitalWrite(relay3_pin, HIGH);
+    Serial.println("Motion 8 detected!");
+  } else {
+  }
+  return;
+}
