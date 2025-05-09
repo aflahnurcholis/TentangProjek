@@ -1,0 +1,148 @@
+#define BLYNK_TEMPLATE_ID "TMPLyxFVET5N"
+#define BLYNK_DEVICE_NAME "PZEM 004T"
+#define BLYNK_AUTH_TOKEN "itMSO9cAvmWkcjsZksEoGgvyppM3JUhE"
+
+//-----------Library yang dipakai-----------//
+#include <PZEM004Tv30.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <BlynkSimpleEsp32.h>
+
+//WidgetTerminal terminal(V6);
+
+#define BLYNK_PRINT Serial
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "Aja Takon";
+char pass[] = "ajatakon";
+BlynkTimer timer;
+
+//-----------Inisalisasi PZEM 004T V3.0 dengan serial ESP32-----------//
+#if defined(ESP32)
+PZEM004Tv30 pzem(Serial2, 16, 17); //IO16 ke TX PZEM, IO17 ke TX PZEM
+#else
+PZEM004Tv30 pzem(Serial2);
+#endif
+
+//-----------OLED 128x64-----------//
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+float TDL;
+int Reset = LOW;
+
+BLYNK_WRITE(V6)
+{
+
+  TDL = param.asFloat(); // nilai "TDL" sebagai Float
+}
+
+BLYNK_WRITE(V7)
+{
+  int value = param.asInt();
+  if (value == 1) {
+    pzem.resetEnergy();
+  }
+}
+
+void setup() {
+//  WiFi.mode(WIFI_STA);
+
+  Serial.begin(115200);
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  Blynk.begin(auth, ssid, pass);
+  
+// Hapus komen dibawah untuk mereset perhitungan Energy PZEM //
+// pzem.resetEnergy();
+}
+//-----------Inisialisasi konektifitas dengan Blynk.Cloud-----------//
+bool isFirstConnect = true;
+BLYNK_CONNECTED() {
+  if (isFirstConnect)
+  {
+    Blynk.syncAll();
+    isFirstConnect = false;
+  }
+}
+
+void loop() {
+
+  Blynk.run();
+  Serial.print("Custom Address:");
+  Serial.println(pzem.readAddress(), HEX);
+
+  //-----------Baris Program Pembacaan Data Sensor PZEM-----------//
+  float voltage = pzem.voltage();
+  float current = pzem.current();
+  float power = pzem.power();
+  float energy = pzem.energy();
+  float frequency = pzem.frequency();
+  float pf = pzem.pf();
+  float biaya = energy * TDL;
+  //float biaya = energy * 1699.53; //1699.53 adalah biaya per kWh listrik 3500VA s/d 5500VA atau golongan R-2/TR
+
+  //-----------Baris Program Cek Pembacaan Data Sensor PZEM-----------//
+  if (isnan(voltage)) {
+    Serial.println("Error reading voltage");
+  } else if (isnan(current)) {
+    Serial.println("Error reading current");
+  } else if (isnan(power)) {
+    Serial.println("Error reading power");
+  } else if (isnan(energy)) {
+    Serial.println("Error reading energy");
+  } else if (isnan(frequency)) {
+    Serial.println("Error reading frequency");
+  } else if (isnan(pf)) {
+    Serial.println("Error reading power factor");
+  } else {
+
+    //-----------Baris Program tulis data sensor di Serial Monitor-----------//
+    Serial.print("Voltage: ");      Serial.print(voltage);      Serial.println("V");
+    Serial.print("Current: ");      Serial.print(current);      Serial.println("A");
+    Serial.print("Power: ");        Serial.print(power);        Serial.println("W");
+    Serial.print("Energy: ");       Serial.print(energy, 3);     Serial.println("kWh");
+    Serial.print("Frequency: ");    Serial.print(frequency, 1); Serial.println("Hz");
+    Serial.print("PF: ");           Serial.println(pf);
+
+  }
+  //-----------Baris Program tulis data sensor di OLED-----------//
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(15, 00);
+  display.println("Monitoring Daya");
+  display.setCursor(0, 16);
+  display.print("Tegangan: ");
+  display.print(voltage);
+  display.print(" VAC");
+  display.setCursor(0, 26);
+  display.print("Arus: ");
+  display.print(current);
+  display.print(" Ampere");
+  display.setCursor(0, 36);
+  display.print("Daya: ");
+  display.print(power);
+  display.print(" Watt");
+  display.setCursor(0, 46);
+  display.print("Energi: ");
+  display.print(energy);
+  display.print(" kWh");
+  display.setCursor(0, 56);
+  display.print("Biaya: Rp ");
+  display.print(biaya);
+  display.display();
+  delay(2000);
+
+  //-----------
+  Blynk.virtualWrite(V1, voltage);
+  Blynk.virtualWrite(V2, current);
+  Blynk.virtualWrite(V3, power);
+  Blynk.virtualWrite(V4, energy);
+  Blynk.virtualWrite(V5, biaya);
+  //Blynk.virtualWrite(V6, TDL);
+
+  Serial.println();
+  delay(2000);
+}
